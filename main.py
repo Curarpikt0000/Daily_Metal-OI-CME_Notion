@@ -65,3 +65,9 @@ def run():
     # 4. 从文件名提取日期 (匹配 YYYYMMDD 或 YYYY-MM-DD)
     date_match = re.search(r'(\d{4})[-_]?(\d{2})[-_]?(\d{2})', filename)
     if date_match:
+        report_date = f"{date_match.group(1)}-{date_match.group(2)}-{date_match.group(3)}"
+    else:
+        # 如果文件名没有明显日期，默认使用当天的日期
+        report_date = datetime.now().strftime("%Y-%m-%d")
+    
+    print(f"提取到的日期: {report_date}")

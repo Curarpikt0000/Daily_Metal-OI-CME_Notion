@@ -37,6 +37,7 @@ jobs:
 
       - name: Commit and Push downloaded file
         run: |
+          mkdir -p downloads # <--- 加了这一行：如果文件夹不存在，就先建一个空的，防止 git 报错
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           git add downloads/

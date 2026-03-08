@@ -71,3 +71,34 @@ def run():
         report_date = datetime.now().strftime("%Y-%m-%d")
     
     print(f"提取到的日期: {report_date}")
+
+    # 5. 构造 GitHub 的公开下载链接供 Notion 使用
+    raw_github_url = f"https://raw.githubusercontent.com/{REPO}/main/{filepath}"
+
+    # 6. 更新你的 Notion Database
+    print("正在写入 Notion...")
+    notion = Client(auth=NOTION_TOKEN)
+    
+    new_page = {
+        "Name": {"title": [{"text": {"content": filename}}]},  # 第一列 Name
+        "Date": {"date": {"start": report_date}},              # 日期列 Date
+        "File": {
+            "files": [
+                {
+                    "name": filename, 
+                    "type": "external", 
+                    "external": {"url": raw_github_url}        # 外部链接 File
+                }
+            ]
+        }
+    }
+
+    try:
+        notion.pages.create(parent={"database_id": DATABASE_ID}, properties=new_page)
+        print("🎉 成功添加到 Notion！")
+    except Exception as e:
+        print(f"写入 Notion 时出错: {e}")
+
+# ================= 注意这里！完全靠左对齐！ =================
+if __name__ == "__main__":
+    run()

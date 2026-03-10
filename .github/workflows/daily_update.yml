@@ -3,7 +3,6 @@ name: CME Daily Download to Notion
 on:
   schedule:
     # 每天 UTC 时间凌晨 2:00 运行 (北京/台北时间上午 10:00)
-    # 你可以根据 CME 实际更新的时间修改这个 cron 表达式
     - cron: '0 2 * * *' 
   workflow_dispatch: # 这个选项允许你随时在网页上手动点击运行测试
 
@@ -35,12 +34,9 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: python main.py
 
-      - name: Commit and Push downloaded file
-        run: |
-          mkdir -p downloads # <--- 加了这一行：如果文件夹不存在，就先建一个空的，防止 git 报错
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add downloads/
-          # 如果周末没有新文件，commit 会报错，加上 || echo 忽略报错继续执行
-          git commit -m "Auto-download CME daily report" || echo "No changes to commit"
-          git push
+      # ===== 修改了这里：使用统一且更稳定的自动提交插件 =====
+      - name: Commit and push downloaded file
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Auto-download CME daily report"
+          file_pattern: "downloads/*"

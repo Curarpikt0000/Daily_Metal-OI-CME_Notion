@@ -1,97 +1,60 @@
 import os
-import re
-import cloudscraper
-import time
-from bs4 import BeautifulSoup
+import requests
 from datetime import datetime
 from notion_client import Client
 
-# 读取 GitHub Secrets
 NOTION_TOKEN = os.getenv("NOTION_TOKEN")
 DATABASE_ID = os.getenv("DATABASE_ID")
 REPO = os.getenv("GITHUB_REPOSITORY")
-
-CME_BASE = "https://www.cmegroup.com"
-BULLETIN_URL = f"{CME_BASE}/market-data/daily-bulletin.html"
+SCRAPER_API_KEY = os.getenv("SCRAPER_API_KEY")
 
 def run():
-    # 创建 scraper 实例，模拟浏览器
-    scraper = cloudscraper.create_scraper(
-        browser={
-            'browser': 'chrome',
-            'platform': 'windows',
-            'desktop': True
-        }
-    )
-    
     os.makedirs("downloads", exist_ok=True)
+    report_date = datetime.now().strftime("%Y-%m-%d")
     
+    # 直接硬编码直达网址，配合自定义文件名保存
     targets = {
-        "future": {"pattern": "Section62", "notion_col": "File", "found": False, "data": {}},
-        "option": {"pattern": "Section64", "notion_col": "Option File", "found": False, "data": {}}
+        "future": {
+            "url": "https://www.cmegroup.com/daily_bulletin/current/Section62_Metals_Futures_Products.pdf",
+            "notion_col": "File",
+            "filename": f"Section62_Metals_Futures_{report_date}.pdf",
+            "found": False
+        },
+        "option": {
+            "url": "https://www.cmegroup.com/daily_bulletin/current/Section64_Metals_Option_Products.pdf",
+            "notion_col": "Option File",
+            "filename": f"Section64_Metals_Option_{report_date}.pdf",
+            "found": False
+        }
     }
 
-    print("Step 1: 使用 cloudscraper 绕过防护访问页面...")
-    try:
-        resp = scraper.get(BULLETIN_URL, timeout=30)
-        if resp.status_code == 200:
-            soup = BeautifulSoup(resp.text, 'html.parser')
-            for a in soup.find_all('a', href=True):
-                href = a['href']
-                for key, target in targets.items():
-                    if not target["found"] and target["pattern"] in href:
-                        target["url"] = CME_BASE + href if href.startswith('/') else href
-                        target["found"] = True
-        else:
-            print(f"网页访问失败 (Status: {resp.status_code})")
-    except Exception as e:
-        print(f"访问异常: {e}")
-
-    # Step 2: 下载逻辑（同样使用 scraper）
-    fallback_urls = {
-        "future": f"{CME_BASE}/daily_bulletin/current/Section62_Metals_Futures_Products.pdf",
-        "option": f"{CME_BASE}/daily_bulletin/current/Section64_Metals_Option_Products.pdf"
-    }
-
+    print("开始通过 ScraperAPI 绕过防火墙下载...")
     for key, target in targets.items():
-        download_url = target.get("url") or fallback_urls[key]
-        filename = download_url.split('/')[-1]
+        # 将目标 URL 拼接到 ScraperAPI 的接口上
+        api_url = f"http://api.scraperapi.com?api_key={SCRAPER_API_KEY}&url={target['url']}"
+        print(f"正在请求 {key} 文件...")
         
-        print(f"正在尝试下载 {key}: {filename}")
         try:
-            # 增加随机延迟防止被封
-            time.sleep(2)
-            file_resp = scraper.get(download_url, timeout=30)
-            if file_resp.status_code == 200:
-                filepath = f"downloads/{filename}"
+            # 代理抓取可能需要一点时间，设置 60 秒超时
+            resp = requests.get(api_url, timeout=60)
+            if resp.status_code == 200:
+                filepath = f"downloads/{target['filename']}"
                 with open(filepath, 'wb') as f:
-                    f.write(file_resp.content)
+                    f.write(resp.content)
                 
-                target["data"] = {
-                    "filename": filename,
-                    "url": f"https://raw.githubusercontent.com/{REPO}/main/{filepath}"
-                }
+                target["final_url"] = f"https://raw.githubusercontent.com/{REPO}/main/{filepath}"
                 target["found"] = True
-                print(f"成功获取 {key} 文件")
+                print(f"✅ {key} 下载成功！已存为 {target['filename']}")
             else:
-                print(f"下载 {key} 失败，状态码: {file_resp.status_code}")
+                print(f"❌ {key} 下载失败，ScraperAPI 返回状态码: {resp.status_code}")
         except Exception as e:
-            print(f"下载 {key} 时发生异常: {e}")
+            print(f"❌ 请求过程出错: {e}")
 
-    # Step 3: 提取日期并更新 Notion
     if not any(t["found"] for t in targets.values()):
-        print("❌ 依然无法绕过防火墙，请考虑备选建议。")
+        print("未能下载任何文件，流程终止。")
         return
 
-    sample_file = ""
-    for t in targets.values():
-        if t["found"]:
-            sample_file = t["data"]["filename"]
-            break
-    
-    date_match = re.search(r'(\d{4})[-_](\d{2})[-_](\d{2})', sample_file)
-    report_date = f"{date_match.group(1)}-{date_match.group(2)}-{date_match.group(3)}" if date_match else datetime.now().strftime("%Y-%m-%d")
-
+    print("正在生成 Notion 记录...")
     properties = {
         "Name": {"title": [{"text": {"content": f"Metals OI_{report_date}"}}]},
         "Date": {"date": {"start": report_date}}
@@ -100,16 +63,15 @@ def run():
     for key, target in targets.items():
         if target["found"]:
             properties[target["notion_col"]] = {
-                "files": [{"name": target["data"]["filename"], "type": "external", "external": {"url": target["data"]["url"]}}]
+                "files": [{"name": target["filename"], "type": "external", "external": {"url": target["final_url"]}}]
             }
 
-    print("Step 4: 写入 Notion...")
     notion = Client(auth=NOTION_TOKEN)
     try:
         notion.pages.create(parent={"database_id": DATABASE_ID}, properties=properties)
-        print(f"🎉 同步完成！日期: {report_date}")
+        print("🎉 Notion 数据库同步完毕！")
     except Exception as e:
-        print(f"Notion 写入失败: {e}")
+        print(f"写入 Notion 时出错: {e}")
 
 if __name__ == "__main__":
     run()

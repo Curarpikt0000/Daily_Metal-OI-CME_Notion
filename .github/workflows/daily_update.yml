@@ -2,12 +2,12 @@ name: CME Daily Download to Notion
 
 on:
   schedule:
-    # 每天 UTC 2:00 (北京 10:00 / 东京 11:00) 运行
+    # 每天 UTC 时间凌晨 2:00 运行 (东京时间上午 11:00)
     - cron: '0 2 * * *' 
-  workflow_dispatch: 
+  workflow_dispatch: # 允许手动点击运行
 
 permissions:
-  contents: write 
+  contents: write # 必须要有写入权限，用于提交下载的文件
 
 jobs:
   run-bot:
@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4 # 升级到 v4 获得更好性能
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -25,17 +25,18 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests beautifulsoup4 notion-client
+          # 注意：这里新增了 cloudscraper 以绕过 403 拦截
+          pip install requests beautifulsoup4 notion-client cloudscraper
 
       - name: Run Python Script
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           DATABASE_ID: ${{ secrets.DATABASE_ID }}
-          GITHUB_REPOSITORY: ${{ github.repository }} # 必须传入这个，否则脚本无法生成 Raw 链接
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: python main.py
 
       - name: Commit and push downloaded files
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "Auto-download CME Metals (Futures & Options) reports"
-          file_pattern: "downloads/*" # 这里会匹配所有下载的文件并上传
+          file_pattern: "downloads/*"

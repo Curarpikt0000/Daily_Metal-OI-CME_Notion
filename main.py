@@ -58,7 +58,7 @@ def run():
     parse_status = "OK"
     futures_json = None
     options_json = None
-    TARGET_FUT = {"GC", "SI", "PL", "PA", "HG", "MGC", "SIL", "MHG", "QO", "QI", "SIC"}
+    TARGET_FUT = {"GC", "SI", "PL", "MGC", "SIL", "QO", "QI", "SIC"}  # 严格 Au/Ag/Pt，不含 PA/HG/MHG
     TARGET_OPT_PREFIXES = ("OG", "SO", "PO")
 
     # 1. 解析 Future PDF (Section 62)

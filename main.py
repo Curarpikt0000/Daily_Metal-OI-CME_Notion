@@ -1,7 +1,10 @@
 import os
 import requests
+import json
 from datetime import datetime
 from notion_client import Client
+from cme_parsers.oi_section62 import parse_section62
+from cme_parsers.oi_section64 import parse_section64
 
 NOTION_TOKEN = os.getenv("NOTION_TOKEN")
 DATABASE_ID = os.getenv("DATABASE_ID")
@@ -43,12 +46,68 @@ def run():
                     f.write(resp.content)
                 
                 target["final_url"] = f"https://raw.githubusercontent.com/{REPO}/main/{filepath}"
+                target["filepath"] = filepath
                 target["found"] = True
                 print(f"✅ {key} 下载成功！已存为 {target['filename']}")
             else:
                 print(f"❌ {key} 下载失败，ScraperAPI 返回状态码: {resp.status_code}")
         except Exception as e:
             print(f"❌ 请求过程出错: {e}")
+
+    # 解析文件
+    parse_status = "OK"
+    futures_json = None
+    options_json = None
+    TARGET_CODES = {"GC", "SI", "PL", "PA", "HG", "MGC", "SIL"}
+
+    # 1. 解析 Future PDF (Section 62)
+    if targets["future"]["found"]:
+        try:
+            print("Parsing future PDF...")
+            future_data = parse_section62(targets["future"]["filepath"])
+            
+            # 过滤贵金属和铜，并检查 status
+            filtered_futures = {}
+            for code in TARGET_CODES:
+                if code in future_data:
+                    c_data = future_data[code]
+                    filtered_futures[code] = {
+                        "name": c_data.get("name"),
+                        "total_oi": c_data.get("total_oi"),
+                        "total_oi_chg": c_data.get("total_oi_chg"),
+                        "months": c_data.get("months", [])
+                    }
+                    c_status = c_data.get("status", "")
+                    if c_status != "OK" and not c_status.startswith("NO_TOTAL"):
+                        parse_status = f"FUT_PARSE_FAILED ({code}): {c_status}"
+            
+            futures_json = json.dumps(filtered_futures, ensure_ascii=False)
+        except Exception as ex:
+            parse_status = f"FUT_PARSE_ERROR: {str(ex)}"
+    else:
+        parse_status = "FUTURE_DOWNLOAD_FAILED"
+
+    # 2. 解析 Option PDF (Section 64)
+    if parse_status == "OK" or parse_status.startswith("FUT_PARSE_FAILED"):
+        if targets["option"]["found"]:
+            try:
+                print("Parsing option PDF...")
+                option_data = parse_section64(targets["option"]["filepath"])
+                
+                # 过滤出键名满足以 TARGET_CODES 中的 CODE_ 开头的商品
+                filtered_options = {}
+                for k, v in option_data.items():
+                    code = k.split("_")[0]
+                    if code in TARGET_CODES:
+                        filtered_options[k] = v
+                
+                options_json = json.dumps(filtered_options, ensure_ascii=False)
+            except Exception as ex:
+                if parse_status == "OK":
+                    parse_status = f"OPT_PARSE_ERROR: {str(ex)}"
+        else:
+            if parse_status == "OK":
+                parse_status = "OPTION_DOWNLOAD_FAILED"
 
     if not any(t["found"] for t in targets.values()):
         print("未能下载任何文件，流程终止。")
@@ -57,7 +116,8 @@ def run():
     print("正在生成 Notion 记录...")
     properties = {
         "Name": {"title": [{"text": {"content": f"Metals OI_{report_date}"}}]},
-        "Date": {"date": {"start": report_date}}
+        "Date": {"date": {"start": report_date}},
+        "Parse Status": {"rich_text": [{"text": {"content": parse_status[:1900]}}]}
     }
 
     for key, target in targets.items():
@@ -65,6 +125,13 @@ def run():
             properties[target["notion_col"]] = {
                 "files": [{"name": target["filename"], "type": "external", "external": {"url": target["final_url"]}}]
             }
+
+    # 当且仅当状态为 OK 时，回填结构化 JSON (失败时 omit 这些字段)
+    if parse_status == "OK" and futures_json is not None and options_json is not None:
+        properties.update({
+            "OI Futures (JSON)": {"rich_text": [{"text": {"content": futures_json}}]},
+            "OI Options (JSON)": {"rich_text": [{"text": {"content": options_json}}]}
+        })
 
     notion = Client(auth=NOTION_TOKEN)
     try:
@@ -75,3 +142,4 @@ def run():
 
 if __name__ == "__main__":
     run()
+

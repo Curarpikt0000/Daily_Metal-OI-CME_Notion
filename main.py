@@ -58,7 +58,8 @@ def run():
     parse_status = "OK"
     futures_json = None
     options_json = None
-    TARGET_CODES = {"GC", "SI", "PL", "PA", "HG", "MGC", "SIL"}
+    TARGET_FUT = {"GC", "SI", "PL", "PA", "HG", "MGC", "SIL", "MHG", "QO", "QI", "SIC"}
+    TARGET_OPT_PREFIXES = ("OG", "SO", "PO", "PAO", "HX")
 
     # 1. 解析 Future PDF (Section 62)
     if targets["future"]["found"]:
@@ -68,7 +69,7 @@ def run():
             
             # 过滤贵金属和铜，并检查 status
             filtered_futures = {}
-            for code in TARGET_CODES:
+            for code in TARGET_FUT:
                 if code in future_data:
                     c_data = future_data[code]
                     filtered_futures[code] = {
@@ -94,11 +95,10 @@ def run():
                 print("Parsing option PDF...")
                 option_data = parse_section64(targets["option"]["filepath"])
                 
-                # 过滤出键名满足以 TARGET_CODES 中的 CODE_ 开头的商品
+                # 过滤出键名以 TARGET_OPT_PREFIXES 中的前缀开头的商品
                 filtered_options = {}
                 for k, v in option_data.items():
-                    code = k.split("_")[0]
-                    if code in TARGET_CODES:
+                    if any(k.startswith(p + "_") for p in TARGET_OPT_PREFIXES):
                         filtered_options[k] = v
                 
                 options_json = json.dumps(filtered_options, ensure_ascii=False)

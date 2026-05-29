@@ -82,7 +82,7 @@ def run():
                     if c_status != "OK" and not c_status.startswith("NO_TOTAL"):
                         parse_status = f"FUT_PARSE_FAILED ({code}): {c_status}"
             
-            futures_json = json.dumps(filtered_futures, ensure_ascii=False)
+            futures_json = json.dumps(filtered_futures, ensure_ascii=False, separators=(',', ':'))[:1900]
         except Exception as ex:
             parse_status = f"FUT_PARSE_ERROR: {str(ex)}"
     else:
@@ -101,7 +101,7 @@ def run():
                     if any(k.startswith(p + "_") for p in TARGET_OPT_PREFIXES):
                         filtered_options[k] = v
                 
-                options_json = json.dumps(filtered_options, ensure_ascii=False)
+                options_json = json.dumps(filtered_options, ensure_ascii=False, separators=(',', ':'))[:1900]
             except Exception as ex:
                 if parse_status == "OK":
                     parse_status = f"OPT_PARSE_ERROR: {str(ex)}"

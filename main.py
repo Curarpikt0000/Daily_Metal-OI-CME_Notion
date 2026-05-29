@@ -133,15 +133,18 @@ def run():
             "OI Options (JSON)": {"rich_text": [{"text": {"content": options_json}}]}
         })
 
-    notion = Client(auth=NOTION_TOKEN)
+    notion = Client(auth=NOTION_TOKEN, notion_version="2022-06-28")
     try:
-        # 查重按 Date 过滤
-        query_res = notion.databases.query(
-            database_id=DATABASE_ID,
-            filter={
-                "property": "Date",
-                "date": {
-                    "equals": report_date
+        # 查重按 Date 过滤 (使用 raw request 绕过 2025-09-03 API 移除 databases.query 的限制)
+        query_res = notion.request(
+            path=f"databases/{DATABASE_ID}/query",
+            method="POST",
+            body={
+                "filter": {
+                    "property": "Date",
+                    "date": {
+                        "equals": report_date
+                    }
                 }
             }
         )
@@ -155,6 +158,7 @@ def run():
             print("🎉 Notion 数据库同步完毕（新建记录）！")
     except Exception as e:
         print(f"写入 Notion 时出错: {e}")
+        raise e
 
 if __name__ == "__main__":
     run()

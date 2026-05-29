@@ -9,16 +9,19 @@ if not NOTION_TOKEN:
     print("Error: NOTION_TOKEN not set in environment.")
     sys.exit(1)
 
-notion = Client(auth=NOTION_TOKEN)
+notion = Client(auth=NOTION_TOKEN, notion_version="2022-06-28")
 
 try:
     print(f"Querying pages for 2026-05-29 in database: {DATABASE_ID}...")
-    res = notion.databases.query(
-        database_id=DATABASE_ID,
-        filter={
-            "property": "Date",
-            "date": {
-                "equals": "2026-05-29"
+    res = notion.request(
+        path=f"databases/{DATABASE_ID}/query",
+        method="POST",
+        body={
+            "filter": {
+                "property": "Date",
+                "date": {
+                    "equals": "2026-05-29"
+                }
             }
         }
     )

@@ -59,7 +59,7 @@ def run():
     futures_json = None
     options_json = None
     TARGET_FUT = {"GC", "SI", "PL", "PA", "HG", "MGC", "SIL", "MHG", "QO", "QI", "SIC"}
-    TARGET_OPT_PREFIXES = ("OG", "SO", "PO", "PAO", "HX")
+    TARGET_OPT_PREFIXES = ("OG", "SO", "PO")
 
     # 1. 解析 Future PDF (Section 62)
     if targets["future"]["found"]:
@@ -135,8 +135,24 @@ def run():
 
     notion = Client(auth=NOTION_TOKEN)
     try:
-        notion.pages.create(parent={"database_id": DATABASE_ID}, properties=properties)
-        print("🎉 Notion 数据库同步完毕！")
+        # 查重按 Date 过滤
+        query_res = notion.databases.query(
+            database_id=DATABASE_ID,
+            filter={
+                "property": "Date",
+                "date": {
+                    "equals": report_date
+                }
+            }
+        )
+        results = query_res.get("results", [])
+        if results:
+            page_id = results[0]["id"]
+            notion.pages.update(page_id=page_id, properties=properties)
+            print("🎉 Notion 数据库已存在对应日期的记录，更新成功！")
+        else:
+            notion.pages.create(parent={"database_id": DATABASE_ID}, properties=properties)
+            print("🎉 Notion 数据库同步完毕（新建记录）！")
     except Exception as e:
         print(f"写入 Notion 时出错: {e}")
 

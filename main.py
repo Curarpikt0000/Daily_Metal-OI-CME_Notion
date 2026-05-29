@@ -68,15 +68,17 @@ def run():
             future_data = parse_section62(targets["future"]["filepath"])
             
             # 过滤贵金属和铜，并检查 status
+            # 只保留 OI 最大的 top-3 合约月，去掉远月小仓，避免 1900 字符截断
             filtered_futures = {}
             for code in TARGET_FUT:
                 if code in future_data:
                     c_data = future_data[code]
+                    all_months = c_data.get("months", [])
+                    top3 = sorted(all_months, key=lambda m: m.get("oi", 0), reverse=True)[:3]
                     filtered_futures[code] = {
-                        "name": c_data.get("name"),
-                        "total_oi": c_data.get("total_oi"),
-                        "total_oi_chg": c_data.get("total_oi_chg"),
-                        "months": c_data.get("months", [])
+                        "oi": c_data.get("total_oi"),
+                        "chg": c_data.get("total_oi_chg"),
+                        "top3": top3
                     }
                     c_status = c_data.get("status", "")
                     if c_status != "OK" and not c_status.startswith("NO_TOTAL"):
